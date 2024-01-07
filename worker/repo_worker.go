@@ -48,7 +48,7 @@ func (worker *GithubRepoWorker) manageRepo(waitgroup *sync.WaitGroup) {
 
 	languages, err = worker.githubService.FetchLanguagesByRepo(worker.repo)
 	if err != nil {
-		worker.logger.Error("error while getting languages", err)
+		worker.logger.Error("error while getting languages ", err)
 		return
 	}
 	localRepo := factory.CreateRepository(worker.repo, languages, worker.logger)

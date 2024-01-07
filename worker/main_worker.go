@@ -33,7 +33,7 @@ func (worker *GithubWorker) JobRoutine() {
 		if worker.githubService.CanMakeACall() { // check ratelimit before creating a new goroutine
 			worker.job()
 		}
-		time.Sleep(time.Duration(1000) * 1000 * time.Millisecond) // once job finished wait a second !
+		time.Sleep(time.Duration(1) * 1000 * time.Millisecond) // once job finished wait a second !
 	}
 }
 
