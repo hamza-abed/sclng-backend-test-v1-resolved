@@ -17,7 +17,7 @@ const GetMaxRepositoryId = `SELECT
 const getAllRepositories = `
 SELECT repo.id, repo.full_name,repo.name,rowner.id,
 	   rowner.name,COALESCE(licence.name, 'no licence'), lang.name,repo_lang.bytes
-FROM (select * from repo limit $1 offset $2) as repo
+FROM (select * from repo order by created_at desc limit $1 offset $2) as repo
 JOIN repo_lang ON repo_lang.repo_id = repo.id
 JOIN lang ON repo_lang.langage_name=lang.name
 JOIN rowner ON rowner.id=repo.rowner_id
