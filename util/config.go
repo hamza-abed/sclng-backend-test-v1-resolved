@@ -14,7 +14,7 @@ type Config struct {
 	DBPassword         string `envconfig:"DB_PASSWORD" default:"postgres"`
 	DBName             string `envconfig:"DB_NAME" default:"test"`
 	EraseDbWhenMigrate bool   `envconfig:"ERASE_DB_WHEN_MIGRATE" default:"true"`
-	GithubToken        string `envconfig:"GITHUB_TOKEN" default:"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"`
+	GithubToken        string `envconfig:"GITHUB_TOKEN" default:""`
 }
 
 func NewConfig() (*Config, error) {
