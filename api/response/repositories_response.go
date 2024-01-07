@@ -7,7 +7,7 @@ type Repository struct {
 	Fullname       string                      `json:"full_name"`
 	OwnerName      string                      `json:"owner"`
 	RepositoryName string                      `json:"repository"`
-	Licence        string                      `json:"-"`
+	Licence        string                      `json:"licence"`
 	Languages      map[string]map[string]int64 `json:"languages"`
 }
 type languages struct {

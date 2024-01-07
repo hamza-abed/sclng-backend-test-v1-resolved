@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/Scalingo/go-utils/logger"
 	"github.com/Scalingo/sclng-backend-test-v1/api/response"
@@ -12,7 +13,7 @@ import (
 func (server *Server) getRepositories(w http.ResponseWriter, r *http.Request, _ map[string]string) error {
 	log := logger.Get(r.Context())
 	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+
 	licenceFilter := r.URL.Query().Get("licence")
 	languageFilter := r.URL.Query().Get("language")
 	limit_str := r.URL.Query().Get("limit")
@@ -20,21 +21,29 @@ func (server *Server) getRepositories(w http.ResponseWriter, r *http.Request, _ 
 
 	limit := 100
 	offset := 0
+	var err error
 	if limit_str != "" {
-		limit = 5
+		limit, err = strconv.Atoi(limit_str)
+		if err != nil {
+			log.WithError(err).Error("Fail to convert limit ", err)
+			w.WriteHeader(http.StatusBadRequest)
+			http.Error(w, "Mauvaise requête", http.StatusBadRequest)
+			return err
+		}
 	}
 	if offset_str != "" {
-		offset = 5
+		offset, err = strconv.Atoi(offset_str)
+		if err != nil {
+			log.WithError(err).Error("Fail to convert offset ", err)
+			w.WriteHeader(http.StatusBadRequest)
+			http.Error(w, "Mauvaise requête", http.StatusBadRequest)
+			return err
+		}
 	}
-	log.Info("licence : ", licenceFilter)
-	log.Info("language : ", languageFilter)
-	log.Info("limit : ", limit)
-	log.Info("offset : ", offset)
-	// get all repositories
 
 	// if limit and offset not spec put a default value
 	var dbRepoResults []repository.DBRepoResult
-	var err error
+
 	if licenceFilter != "" && languageFilter != "" { // filter by licence and language
 		dbRepoResults, err = server.repoRepository.SearchInRepositoryByLanguageAndLicence(limit, offset, licenceFilter, languageFilter)
 	} else if licenceFilter != "" { // filter only by licence
@@ -46,8 +55,8 @@ func (server *Server) getRepositories(w http.ResponseWriter, r *http.Request, _ 
 	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		server.log.Error("error : ", err)
+		log.WithError(err).Error("Fail to while requesting db ", err)
+		http.Error(w, "Erreur lors de la cnx au serveur", http.StatusInternalServerError)
 	}
 
 	repositories := response.GenerateRepositoriesResponseFromDBResult(dbRepoResults)
@@ -56,5 +65,6 @@ func (server *Server) getRepositories(w http.ResponseWriter, r *http.Request, _ 
 		log.WithError(err).Error("Fail to encode JSON")
 		http.Error(w, "Erreur lors de l'encodage JSON", http.StatusInternalServerError)
 	}
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
