@@ -8,31 +8,35 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Migrate(db *sql.DB, logger logrus.FieldLogger, eraseExistingSchema bool) {
+func Migrate(db *sql.DB, logger logrus.FieldLogger, eraseExistingSchema bool) error {
+	var err error
 	if eraseExistingSchema {
-		dropAllSchemas(db, logger)
+		err = dropAllSchemas(db, logger)
 	}
-	createSchema(db, logger)
-	createAllTables(db, logger)
+	err = createSchema(db, logger)
+	err = createAllTables(db, logger)
+	return err
 }
 
-func dropAllSchemas(db *sql.DB, logger logrus.FieldLogger) {
+func dropAllSchemas(db *sql.DB, logger logrus.FieldLogger) error {
 	logger.Info("removing all tables ...")
-	util.RunCreateSQLStatement(queries.DropSchemaPublic, db, logger)
+	return util.RunCreateSQLStatement(queries.DropSchemaPublic, db, logger)
 }
 
-func createSchema(db *sql.DB, logger logrus.FieldLogger) {
+func createSchema(db *sql.DB, logger logrus.FieldLogger) error {
 	logger.Info("creating schema public ...")
-	util.RunCreateSQLStatement(queries.CreateSchemaPublic, db, logger)
+	return util.RunCreateSQLStatement(queries.CreateSchemaPublic, db, logger)
 }
 
-func createAllTables(db *sql.DB, logger logrus.FieldLogger) {
+func createAllTables(db *sql.DB, logger logrus.FieldLogger) error {
+	var err error
 	logger.Info("creating DB tables ...")
-	util.RunCreateSQLStatement(queries.CreateTableRepositoryOwner, db, logger)
-	util.RunCreateSQLStatement(queries.CreateTableRepositoryLicence, db, logger)
-	util.RunCreateSQLStatement(queries.CreateTableRepository, db, logger)
-	util.RunCreateSQLStatement(queries.CreateTableLanguage, db, logger)
-	util.RunCreateSQLStatement(queries.CreateTableRepositoryLanguage, db, logger)
+	err = util.RunCreateSQLStatement(queries.CreateTableRepositoryOwner, db, logger)
+	err = util.RunCreateSQLStatement(queries.CreateTableRepositoryLicence, db, logger)
+	err = util.RunCreateSQLStatement(queries.CreateTableRepository, db, logger)
+	err = util.RunCreateSQLStatement(queries.CreateTableLanguage, db, logger)
+	err = util.RunCreateSQLStatement(queries.CreateTableRepositoryLanguage, db, logger)
+	return err
 }
 
 //@todo: create indexes

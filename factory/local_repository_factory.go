@@ -11,9 +11,12 @@ func CreateRepository(repo *github.Repository, languages []*model.Language, logg
 }
 
 func CreateOwner(gowner *github.User) *model.Owner {
-	return &model.Owner{ID: gowner.GetID(), Name: gowner.GetName()}
+	return &model.Owner{ID: gowner.GetID(), Name: gowner.GetLogin()}
 }
 
 func CreateLicence(glicence *github.License) *model.Licence {
+	if glicence == nil {
+		return nil
+	}
 	return &model.Licence{Key: glicence.GetKey(), Name: glicence.GetName()}
 }

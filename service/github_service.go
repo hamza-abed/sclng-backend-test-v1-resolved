@@ -14,8 +14,9 @@ import (
 
 type IGithubService interface {
 	CanMakeACall() bool
-	RetrieveRepos() ([]*github.Repository, error)
-	RetrieveLanguagesByRepo(repo *github.Repository) ([]*model.Language, error)
+	FetchRepos(sinceRepoId int64) ([]*github.Repository, error)
+	FetchLanguagesByRepo(repo *github.Repository) ([]*model.Language, error)
+	GetFullRepos(repo *github.Repository) (*github.Repository, error)
 }
 
 type GithubService struct {
@@ -43,36 +44,38 @@ func (githubService *GithubService) CanMakeACall() bool {
 	return false
 }
 
-func (githubService *GithubService) RetrieveRepos() ([]*github.Repository, error) {
+func (githubService *GithubService) FetchRepos(sinceRepoId int64) ([]*github.Repository, error) {
 	if !githubService.CanMakeACall() {
-		return nil, fmt.Errorf("RateLimit attended !")
+		return nil, fmt.Errorf("RateLimit exceded !")
 	}
-
 	// option for public repositories
-	opt := &github.RepositoryListByOrgOptions{
-		ListOptions: github.ListOptions{PerPage: 1},
-		Type:        "public",
-	}
-
+	opt := &github.RepositoryListAllOptions{Since: sinceRepoId}
 	client := githubService.getClient()
 	githubService.lastReservation = githubService.limiter.Reserve()
 	// get a list of public repos
-	repos, _, err := client.Repositories.ListByOrg(context.Background(), "github", opt)
-
+	repos, _, err := client.Repositories.ListAll(context.Background(), opt)
 	return repos, err
 }
 
-func (githubService *GithubService) RetrieveLanguagesByRepo(repo *github.Repository) ([]*model.Language, error) {
-	githubService.logger.Info("getting repo languages owner: ", repo.GetOwner().Login, " repo name : ", repo.GetName())
+func (githubService *GithubService) GetFullRepos(repo *github.Repository) (*github.Repository, error) {
 	if !githubService.CanMakeACall() {
-		return nil, fmt.Errorf("RateLimit attended !")
+		return nil, fmt.Errorf("RateLimit exceded !")
+	}
+	client := githubService.getClient()
+	githubService.lastReservation = githubService.limiter.Reserve()
+	filledRepo, _, err := client.Repositories.Get(context.Background(), *repo.Owner.Login, *repo.Name)
+	return filledRepo, err
+}
+
+func (githubService *GithubService) FetchLanguagesByRepo(repo *github.Repository) ([]*model.Language, error) {
+
+	if !githubService.CanMakeACall() {
+		return nil, fmt.Errorf("RateLimit exceded !")
 	}
 	var result []*model.Language
 	client := githubService.getClient()
 	githubService.lastReservation = githubService.limiter.Reserve()
-	//githubService.logger.Debug("getting repo languages owner: ", repo.Owner.GetLogin(), " repo name : ", repo.GetName())
 	data, _, err := client.Repositories.ListLanguages(context.Background(), repo.Owner.GetLogin(), repo.GetName())
-
 	if err != nil {
 		githubService.logger.Error("error while getting repo languages", err)
 		return nil, err

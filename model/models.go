@@ -2,10 +2,6 @@ package model
 
 import "time"
 
-/*type Language struct {
-	Name string
-}*/
-
 type Licence struct {
 	Key  string
 	Name string

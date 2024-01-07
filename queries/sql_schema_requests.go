@@ -22,7 +22,7 @@ const CreateTableRepository = `CREATE TABLE IF NOT EXISTS repo (
     name VARCHAR(255),
     created_at TIMESTAMP,
     rowner_id bigint NOT NULL,
-    licence_key VARCHAR(255) NOT NULL,
+    licence_key VARCHAR(255),
     CONSTRAINT repo_pkey PRIMARY KEY (id),
     CONSTRAINT fk_rowner_id_in_gr_from_o FOREIGN KEY (rowner_id)
 			REFERENCES rowner (id) MATCH SIMPLE,

@@ -1,4 +1,4 @@
-package service
+package migration
 
 import (
 	"os"
@@ -9,23 +9,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var gservice IGithubService
-var cfg *util.Config
-
 func TestMain(m *testing.M) {
+
+	os.Exit(m.Run())
+}
+
+func TestMigrate(t *testing.T) {
 	log := logger.Default()
 	cfg, err := util.NewConfigTest()
 	if err != nil {
 		log.WithError(err).Error("Fail to initialize configuration")
 		os.Exit(1)
 	}
-	gservice = NewGithubService(log, cfg.GithubToken)
 
-	os.Exit(m.Run())
-}
+	// connect DB
+	db := util.ConnectPGDB(cfg, log)
 
-func TestRetrieveRepos(t *testing.T) {
-	repos, err := gservice.FetchRepos(712574319)
-	require.NoError(t, err, "should not return an error", err)
-	require.NotEmpty(t, repos, "should not be empty")
+	// migrate database
+	err = Migrate(db, log, cfg.EraseDbWhenMigrate)
+	require.NoError(t, err)
 }

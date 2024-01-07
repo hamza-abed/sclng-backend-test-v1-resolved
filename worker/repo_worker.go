@@ -2,8 +2,10 @@ package worker
 
 import (
 	"database/sql"
+	"sync"
 
 	"github.com/Scalingo/sclng-backend-test-v1/factory"
+	"github.com/Scalingo/sclng-backend-test-v1/model"
 	"github.com/Scalingo/sclng-backend-test-v1/repository"
 	"github.com/Scalingo/sclng-backend-test-v1/service"
 	"github.com/google/go-github/github"
@@ -11,7 +13,7 @@ import (
 )
 
 type IRepoWorker interface {
-	manageRepo()
+	manageRepo(waitgroup *sync.WaitGroup)
 }
 
 type GithubRepoWorker struct {
@@ -21,21 +23,30 @@ type GithubRepoWorker struct {
 	githubService  service.IGithubService
 }
 
-func newRepoWorker(db *sql.DB, logger logrus.FieldLogger, repo *github.Repository, githubService service.IGithubService) IRepoWorker {
+func newRepoWorker(db *sql.DB, logger logrus.FieldLogger, repo *github.Repository, githubService service.IGithubService, repoRepository repository.IRepoRepository) IRepoWorker {
 	return &GithubRepoWorker{
-		logger: logger, repo: repo, repoRepository: repository.NewRepoRepository(db, logger), githubService: githubService,
+		logger: logger, repo: repo, repoRepository: repoRepository, githubService: githubService,
 	}
 }
 
-func (worker *GithubRepoWorker) manageRepo() {
+func (worker *GithubRepoWorker) manageRepo(waitgroup *sync.WaitGroup) {
+	defer waitgroup.Done()
 	// if repository already saved do nothing
 	isSaved, err := worker.repoRepository.IsRepositorySaved(worker.repo.GetID())
 	if isSaved || err != nil {
-		worker.logger.Error(err)
+		if err != nil {
+			worker.logger.Error("error when trying to check if repo is already saved ", err)
+		}
 		return
 	}
-	// else get all languages
-	languages, err := worker.githubService.RetrieveLanguagesByRepo(worker.repo)
+	worker.repo, err = worker.githubService.GetFullRepos(worker.repo)
+	if err != nil {
+		worker.logger.Error("error when getting full repo info ", err)
+		return
+	}
+	var languages []*model.Language
+
+	languages, err = worker.githubService.FetchLanguagesByRepo(worker.repo)
 	if err != nil {
 		worker.logger.Error("error while getting languages", err)
 		return

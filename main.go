@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/Scalingo/go-handlers"
 	"github.com/Scalingo/go-utils/logger"
+	"github.com/Scalingo/sclng-backend-test-v1/api"
 	"github.com/Scalingo/sclng-backend-test-v1/migration"
 	"github.com/Scalingo/sclng-backend-test-v1/util"
 	"github.com/Scalingo/sclng-backend-test-v1/worker"
@@ -27,37 +25,17 @@ func main() {
 
 	// migrate database if environment dev
 	if cfg.Env == "dev" {
-		migration.Migrate(db, log, cfg.EraseDbWhenMigrate)
+		migration.Migrate(db, log, !cfg.EraseDbWhenMigrate)
 	}
 
 	// start worker fetching
 	mainWorker := worker.NewMainWorker(db, log, cfg.GithubToken)
 	go mainWorker.JobRoutine()
 
-	log.Info("Initializing routes")
-	router := handlers.NewRouter(log)
-	router.HandleFunc("/ping", pongHandler)
-	// Initialize web server and configure the following routes:
-	// GET /repos
-	// GET /stats
-
-	log = log.WithField("port", cfg.Port)
-	log.Info("Listening...")
-	err = http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), router)
+	// start API server
+	server, err := api.NewServer(log, db)
 	if err != nil {
-		log.WithError(err).Error("Fail to listen to the given port")
-		os.Exit(2)
+		log.Error("error while creating server", err)
 	}
-}
-
-func pongHandler(w http.ResponseWriter, r *http.Request, _ map[string]string) error {
-	log := logger.Get(r.Context())
-	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	err := json.NewEncoder(w).Encode(map[string]string{"status": "pong"})
-	if err != nil {
-		log.WithError(err).Error("Fail to encode JSON")
-	}
-	return nil
+	server.Start(fmt.Sprintf(":%d", cfg.Port))
 }

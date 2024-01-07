@@ -2,8 +2,8 @@ package repository
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
+	"sync"
 
 	"github.com/Scalingo/sclng-backend-test-v1/model"
 	"github.com/Scalingo/sclng-backend-test-v1/queries"
@@ -12,16 +12,21 @@ import (
 
 type IRepoRepository interface {
 	IsRepositorySaved(repoId int64) (bool, error)
-	existsInDBRequestByID(sql string, idOrKey interface{}) (bool, error)
 	isOwnerSaved(ownerId int64) (bool, error)
 	isLicenceSaved(licenceKey string) (bool, error)
 	isLanguageSaved(languageName string) (bool, error)
 	SaveRepository(repo *model.Repository) error
+	GetMaxRepositoryId() (int64, error)
+	SearchInRepository(limit int, offset int) ([]DBRepoResult, error)
+	SearchInRepositoryByLicence(limit int, offset int, licence string) ([]DBRepoResult, error)
+	SearchInRepositoryByLanguage(limit int, offset int, language string) ([]DBRepoResult, error)
+	SearchInRepositoryByLanguageAndLicence(limit int, offset int, licence string, language string) ([]DBRepoResult, error)
 }
 
 type LocalRepoRepository struct {
 	db     *sql.DB
 	logger logrus.FieldLogger
+	mutex  sync.Mutex
 }
 
 func NewRepoRepository(db *sql.DB, logger logrus.FieldLogger) IRepoRepository {
@@ -31,10 +36,13 @@ func NewRepoRepository(db *sql.DB, logger logrus.FieldLogger) IRepoRepository {
 }
 
 func (repoRepository *LocalRepoRepository) IsRepositorySaved(repoId int64) (bool, error) {
-	return repoRepository.existsInDBRequestByID(queries.IsGithubRepositoryExists, repoId)
+	return repoRepository.existsInDBRequestByIDOrKey(queries.IsGithubRepositoryExists, repoId)
 }
 
 func (repoRepository *LocalRepoRepository) SaveRepository(repo *model.Repository) error {
+	// protect transactions from deadlock
+	repoRepository.mutex.Lock()
+	defer repoRepository.mutex.Unlock()
 
 	// check if owner exists
 	ownerSaved, err := repoRepository.isOwnerSaved(repo.Owner.ID)
@@ -42,10 +50,14 @@ func (repoRepository *LocalRepoRepository) SaveRepository(repo *model.Repository
 		repoRepository.logger.Error("error while checking if owner exists", err)
 	}
 	// check if licence exits get its id
-	licenceSaved, err := repoRepository.isLicenceSaved(repo.Licence.Key)
-	if err != nil {
-		repoRepository.logger.Error("error while checking if licence exists", err)
+	licenceSaved := false
+	if repo.Licence != nil {
+		licenceSaved, err = repoRepository.isLicenceSaved(repo.Licence.Key)
+		if err != nil {
+			repoRepository.logger.Error("error while checking if licence exists", err)
+		}
 	}
+
 	tx, err := repoRepository.db.Begin()
 	if err != nil {
 		repoRepository.logger.Error("cant begin transaction", err)
@@ -53,8 +65,7 @@ func (repoRepository *LocalRepoRepository) SaveRepository(repo *model.Repository
 	defer func() {
 		// Rollback if one error detected in transaction
 		if r := recover(); r != nil {
-			repoRepository.logger.Error("Transaction rollback cuased by error", r)
-			fmt.Println("Rollback de la transaction en raison d'une erreur:", r)
+			repoRepository.logger.Error("Transaction rollback cuased by error ", r, "  licenceSaved = ", licenceSaved, " ownerSaved=", ownerSaved)
 			tx.Rollback()
 		}
 	}()
@@ -70,15 +81,21 @@ func (repoRepository *LocalRepoRepository) SaveRepository(repo *model.Repository
 		}
 	}
 
-	if !licenceSaved {
+	if repo.Licence != nil && !licenceSaved {
 		// Create Licence
 		_, err = tx.Exec(queries.CreateLicence, repo.Licence.Key, repo.Licence.Name)
 		if err != nil {
 			panic(err)
 		}
 	}
+
 	// Create Repository
-	_, err = tx.Exec(queries.CreateRepository, repo.ID, repo.FullName, repo.Name, repo.CreatedAt, repo.Owner.ID, repo.Licence.Key)
+	if repo.Licence != nil {
+		_, err = tx.Exec(queries.CreateRepository, repo.ID, repo.FullName, repo.Name, repo.CreatedAt, repo.Owner.ID, repo.Licence.Key)
+	} else {
+		_, err = tx.Exec(queries.CreateRepository, repo.ID, repo.FullName, repo.Name, repo.CreatedAt, repo.Owner.ID, nil)
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -106,25 +123,40 @@ func (repoRepository *LocalRepoRepository) SaveRepository(repo *model.Repository
 	return tx.Commit()
 }
 
-func (repoRepository *LocalRepoRepository) existsInDBRequestByID(sql string, idOrKey interface{}) (bool, error) {
-	var exist bool
-	if err := repoRepository.db.QueryRow(sql, idOrKey).Scan(&exist); err != nil {
+// This returns the most recent repository ID, and -1 if DB is empty
+func (repoRepository *LocalRepoRepository) GetMaxRepositoryId() (int64, error) {
+	var maxId int64 = -1
+	if err := repoRepository.db.QueryRow(queries.GetMaxRepositoryId).Scan(&maxId); err != nil {
 		if err != nil {
+			repoRepository.logger.Error("error while request : ", queries.GetMaxRepositoryId, " ", err)
+			return maxId, err
+		}
+		repoRepository.logger.Error("error while request : ", queries.GetMaxRepositoryId, " ", err)
+		return maxId, err
+	}
+	return maxId, nil
+}
+
+func (repoRepository *LocalRepoRepository) existsInDBRequestByIDOrKey(sql string, key interface{}) (bool, error) {
+	var exist bool
+	if err := repoRepository.db.QueryRow(sql, key).Scan(&exist); err != nil {
+		if err != nil {
+			repoRepository.logger.Error("error while request : ", sql, " ", err)
 			return false, err
 		}
+		repoRepository.logger.Error("error while request : ", sql, " ", err)
 		return false, err
 	}
 	return exist, nil
 }
-
 func (repoRepository *LocalRepoRepository) isOwnerSaved(ownerId int64) (bool, error) {
-	return repoRepository.existsInDBRequestByID(queries.IsOwnerExists, ownerId)
+	return repoRepository.existsInDBRequestByIDOrKey(queries.IsOwnerExists, ownerId)
 }
 
 func (repoRepository *LocalRepoRepository) isLicenceSaved(licenceKey string) (bool, error) {
-	return repoRepository.existsInDBRequestByID(queries.IsLicenceExists, licenceKey)
+	return repoRepository.existsInDBRequestByIDOrKey(queries.IsLicenceExists, licenceKey)
 }
 
 func (repoRepository *LocalRepoRepository) isLanguageSaved(languageName string) (bool, error) {
-	return repoRepository.existsInDBRequestByID(queries.IsLanguageExists, languageName)
+	return repoRepository.existsInDBRequestByIDOrKey(queries.IsLanguageExists, languageName)
 }
