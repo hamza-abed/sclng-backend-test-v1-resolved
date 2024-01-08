@@ -37,8 +37,6 @@ func (server *Server) setupRouter() {
 	// Initialize web server and configure the following routes:
 	// GET /repos
 	router.HandleFunc("/repos", server.getRepositories).Methods("GET")
-	// GET /stats
-	router.HandleFunc("/stats", server.getRepositories).Methods("GET")
 
 	server.router = router
 }
